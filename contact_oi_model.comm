@@ -1,0 +1,1661 @@
+import numpy as np
+import re
+import json
+import copy
+import sys
+import time
+def filtre_element(lst_new,nnodold,dctElems2,lst_old): #dctElems2[element_label]
+   lst_new1=[]
+   for keynew in lst_new:
+       nnodenew=0
+       nodenew=dctElems2[keynew]
+       for iinew in nodenew:
+           if iinew in nnodold:
+              nnodenew=nnodenew+1
+       if nnodenew>=3:
+           
+           lst_old.append(keynew)  
+       else:
+           lst_new1.append(keynew)    
+           
+   return lst_new1,lst_old
+   
+
+def oi_calc(so,sh,kappa):
+      return so + kappa * sh # Carters equation OI = so + kappa * sh
+      
+def principal_Stress_calc(sxx,syy,sxy): # compute OI
+      s11=(sxx+syy)/2+sqrt(1*(sxx-syy)**2/4+sxy**2)
+      s22=(sxx+syy)/2-sqrt(1*(sxx-syy)**2/4+sxy**2)
+      ss=1/2*sqrt((s11-s22)**2)
+      sh=(s11+s22)/2
+      return ss+kappa*sh
+
+def principal_Stress_calc_soo(sxx,syy,sxy):# compute shear stress
+      s11=(sxx+syy)/2+sqrt(1*(sxx-syy)**2/4+sxy**2)
+      s22=(sxx+syy)/2-sqrt(1*(sxx-syy)**2/4+sxy**2)
+      ss=1/2*sqrt((s11-s22)**2)
+      return ss
+
+def principal_Stress_calcsh(sxx,syy,sxy): # compute hydrostatic stress
+      s11=(sxx+syy)/2+sqrt(1*(sxx-syy)**2/4+sxy**2)
+      s22=(sxx+syy)/2-sqrt(1*(sxx-syy)**2/4+sxy**2)
+      ss=1/2*sqrt((s11-s22)**2)
+      sh=(s11+s22)/2
+      return sh #s11,s22    
+
+
+
+def filtre_element(lst_new,nnodold,dctElems2,lst_old,nodeallos): #eliminate isolated elements : if elements are surounded by other elements of different material properties
+   lst_new1=[]
+   lst_new1=[]
+   for keynew in lst_new:
+       nnodenew=0
+       nnodenew1=0
+       nodenew=dctElems2[keynew]
+       
+       for iinew in nodenew:
+           if iinew in nnodold:
+              nnodenew=nnodenew+1
+           if iinew in nodeallos:
+              nnodenew1=nnodenew1+1
+
+       ##print('nodenewi=',nodenew,nnodenew)
+       if nnodenew+nnodenew1>=len(nodenew) or nnodenew>=4:
+           
+           lst_old=np.append(lst_old,keynew)  
+       else:
+           lst_new1=np.append(lst_new1,keynew)    
+           
+   return lst_new1,lst_old
+
+
+
+
+def find_percent_oi(lst_old1,lst_old4,nele1,nele4): # minimum percentage of elements ossified in design domains
+    
+   
+   hmin=min(len(lst_old1)/nele1,len(lst_old4)/nele4) 
+           
+   return hmin
+
+
+from Utilitai.partition import *
+
+folder_file_main="/home/majnooni/VanVuongLAI/code_lai_contact_plane_plane_understressplane/"
+
+
+
+# Opening JSON file of parameters namereper
+with open(folder_file_main+"namereper.json") as input_params:
+      namereper=json.load(input_params)
+
+# Opening JSON file of parameters used in the ossification-inspired method
+with open(folder_file_main+namereper['name']+"/input_params.json") as input_params:
+      input_data = json.load(input_params)
+
+iteration = input_data["iteration"]
+# ALL PATHS
+main_root = input_data["main_root"]
+path_A1 = input_data["path_A1"]
+path_A3 = input_data["path_A3"]
+path_A5 = input_data["path_A5"]
+path_elems_criteria = input_data["path_elems_criteria"]
+path_rmed = input_data["path_rmed"]
+path_vtk = input_data["path_vtk"]
+path_Eevo = input_data["path_Eevo"]
+elems_props_new = input_data["elems_props_new"]
+elems_props_current = input_data["elems_props_current"]
+path_cp_values = input_data["path_cp_values"]
+repertoire=input_data["repertoire"]
+fichier_folderv=input_data['fichier_folder']
+
+# material properties, applied force, kappa, koi
+Encc = input_data["Encc"]
+hminimpose=input_data["h1"]
+Eecc = input_data["Eecc"]
+Nuncc = input_data["Nuncc"]
+Nuecc = input_data["Nuecc"]
+Fy = input_data["Fy"]
+l2 = input_data["l2"]
+koimin=input_data["koi"]
+kappa = input_data["kappa"]
+lcontour=input_data["lcontour"]
+F_Countour = (Fy/lcontour)/Eecc # applied uniform force
+#########################################################################
+#                                                                       
+#                                   CODE ASTER                                
+#                                                                       
+#########################################################################
+
+DEBUT(LANG='FR',
+      PAR_LOT='NON',
+      )
+
+
+U = 50 # randomly selected
+DEFI_FICHIER(ACTION='ASSOCIER',
+            FICHIER=path_A1,
+            UNITE=U)
+
+mesh_A1 = LIRE_MAILLAGE(FORMAT='IDEAS',
+                  UNITE=U,
+                  INFO=1)
+
+
+U += 1
+DEFI_FICHIER(ACTION='ASSOCIER',
+            FICHIER=path_A3,
+            UNITE=U)
+
+mesh_A3 = LIRE_MAILLAGE(FORMAT='IDEAS', # IDEAS (.unv) format with PRE_IDEAS, U7.01.01; Jean-Pierre Aubry page 27
+                  UNITE=U,
+                  INFO=1)
+
+
+U += 1
+DEFI_FICHIER(ACTION='ASSOCIER',
+            FICHIER=path_A5,
+            UNITE=U)
+mesh_A5 = LIRE_MAILLAGE(FORMAT='IDEAS', # IDEAS (.unv) format with PRE_IDEAS, U7.01.01; Jean-Pierre Aubry page 27
+                  UNITE=U,
+                  INFO=1)
+
+# Mesh merging
+
+
+
+
+meshA345 = ASSE_MAILLAGE(MAILLAGE_1=mesh_A3,
+                        MAILLAGE_2=mesh_A5,
+                        OPERATION='COLLAGE',
+                        COLLAGE=_F(GROUP_MA_1='pgColA42',
+                                    GROUP_MA_2='pgColA5',),
+                        )
+
+
+mesh = ASSE_MAILLAGE(MAILLAGE_1=mesh_A1,
+                  MAILLAGE_2=meshA345,
+                  OPERATION='SUPERPOSE',)
+
+mesh = MODI_MAILLAGE(reuse=mesh,
+                  MAILLAGE=mesh,
+                  ORIE_PEAU_2D=_F(GROUP_MA=('pgCtA2', 'pgCtA3', 'pgLoad'),),
+                  INFO=1,)
+
+# Create GROUP OF ELEMENTS
+mesh = DEFI_GROUP(reuse=mesh,
+                  MAILLAGE=mesh,
+                  CREA_GROUP_MA=_F(NOM='TOTAL',
+                                    TOUT='OUI',
+                                    TYPE_MAILLE='TOUT',),
+                  ALARME='OUI',)
+
+
+
+mesh = DEFI_GROUP(reuse=mesh,
+                  MAILLAGE=mesh,
+                  CREA_GROUP_MA=_F(NOM='pgA1A41',
+                                    UNION=('pgA1', 'pgA2'),
+                                    TYPE_MAILLE='TOUT',),
+                  ALARME='OUI',)
+
+
+mesh = DEFI_GROUP(reuse=mesh,
+                  MAILLAGE=mesh,
+                  CREA_GROUP_MA=_F(NOM='pgA1A42',
+                                    UNION=('pgA3', 'pgA4'),
+                                    TYPE_MAILLE='TOUT',),
+                  ALARME='OUI',)
+
+mesh = DEFI_GROUP(reuse=mesh,
+                  MAILLAGE=mesh,
+                  CREA_GROUP_MA=_F(NOM='pgA1A4',
+                                    UNION=('pgA1', 'pgA4'),
+                                    TYPE_MAILLE='TOUT',),
+                  ALARME='OUI',)
+               
+
+#Create GROUP OF NODES
+mesh = DEFI_GROUP(reuse = mesh,
+                  MAILLAGE = mesh,
+                  CREA_GROUP_NO=(
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgFixed'), NOM=('pgFixed')),
+                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA1'), NOM=('pgColA1')),
+                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA1'), NOM=('pgSymA1')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA1'), NOM=('pgA1')),
+                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA2'),NOM=('pgColA2')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgCtA2'),NOM=('pgCtA2')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA2'),NOM=('pgSymA2')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA2'),NOM=('pgA2')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA0'),NOM=('pgA0')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgCtA3'), NOM=('pgCtA3')),
+                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA3'), NOM=('pgColA3')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA3'),NOM=('pgSymA3')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA3'),NOM=('pgA3')),
+                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA41'), NOM=('pgColA41')),
+                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA42'), NOM=('pgColA42')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA4'),NOM=('pgSymA4')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA4'),NOM=('pgA4')),
+                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA5'), NOM=('pgColA5')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgLoad'), NOM=('pgLoad')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA5'),NOM=('pgSymA5')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA5'),NOM=('pgA5')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('TOTAL'),NOM=('TOTAL')),
+                                    ),
+                                    )
+
+mesh = DEFI_GROUP(CREA_GROUP_NO = (_F(GROUP_MA = ('pgSymA1'),
+                                      NOM = 'pgSymA1',
+                                      OPTION = 'NOEUD_ORDO')),
+                  MAILLAGE = mesh,
+                  reuse = mesh)
+
+
+mesh = DEFI_GROUP(CREA_GROUP_NO = (_F(GROUP_MA = ('pgLoad'),
+                                      NOM = 'nodeFY1',
+                                      OPTION = 'NOEUD_ORDO')),
+                  MAILLAGE = mesh,
+                  reuse = mesh)
+mesh = DEFI_GROUP (reuse = mesh, 
+                  MAILLAGE = mesh,
+                  CREA_GROUP_NO = (_F ( NOM = 'nodeFY', INTERSEC= ('pgLoad', 'pgSymA5')),)
+                  )
+                  
+mesh = DEFI_GROUP (reuse = mesh, 
+                  MAILLAGE = mesh,
+                  CREA_GROUP_NO = (_F ( NOM = 'nodeFY2', DIFFE= ('pgLoad', 'nodeFY')),)
+                  ) 
+                              
+#########################################################################
+#                                                                       #
+#                                   MAIN                                #
+#                                                                       #
+#########################################################################
+#for the malliage All
+ALLdat = MAIL_PY() # Function to access mesh with python
+ALLdat.FromAster(mesh)
+ALLnnod = ALLdat.dime_maillage[0] #number of nodes
+ALLnelem = ALLdat.dime_maillage[2] #number of elements
+NoGO = ALLdat.gno     ## list of GROUP_NO groups (see help(MAIL_PY) for object methods reference)
+coord_nodes = ALLdat.cn  ## xyz coordinates of nodes (nonu*3 matrix)
+connec = ALLdat.co #   Get element connection as class CONNEC a two  numpy arrays
+#       referring to an element of it as follow:
+#       Connex[k]  array (sequence) of the node of the k-th element
+
+
+#####################################################################
+#       Connex[k][j]  reference the j-th node of the k-th element connectivity
+#####################################################################
+###### Structuring all nodes, elements, coordinates, GROUP_MA, GROUP_NO 
+mesh_data = ALLdat.Voir_Mail()
+
+mesh_data_list = list()
+for line in mesh_data.split("\n"):
+    mesh_data_list.append(line)
+
+
+###### Constrcuting all coordinates, nodes and elements
+dctNodes = dict() # {'N1': {'xc': 0.0, 'yc': 0.0, 'zc': 0.0}}
+dctElems = dict() # {'M1': {'N1': {'xc': 0.0, 'yc': 0.0, 'zc': 0.0}, 'N6': {'xc': 0.999999999999267, 'yc': 0.0, 'zc': 0.0}}}
+dctElems2 = dict() # {'M1': {'N1','N6'}}
+
+
+for line in mesh_data.split("\n"):
+      if len(line) != 0: # there are some lines with zero len
+            if line[0] == 'N':
+                  temp_line = re.sub("\s+", ",", line.strip()).split(',')
+                  node_label = temp_line[0]
+                  coordinates = temp_line[1:]
+                  xc = float(temp_line[1:][0])
+                  yc = float(temp_line[1:][1])
+                  zc = float(temp_line[1:][2])
+                  dctNodes[temp_line[0]] = {
+                                                "xc":round(xc,2),
+                                                "yc":round(yc,2),
+                                                "zc":round(zc,2)
+                                                }
+
+            if line[0] == 'M':
+                  temp_line = re.sub("\s+", ",", line.strip()).split(',')
+                  element_label = temp_line[0]
+                  nodes_of_element = temp_line[1:]
+                  dctElems[element_label] = {Node:dctNodes[Node] for Node in nodes_of_element}
+                  dctElems2[element_label] = nodes_of_element
+                 
+                  ####print('element:',element_label,dctElems2[element_label])
+
+
+
+
+###### Constrcuting all GROUP_MA
+GROUP_MA_dict = dict()
+for num in range(len(mesh_data_list)):
+    if mesh_data_list[num] == 'GROUP_MA':
+        temp_MA = re.sub("\s+", ",", mesh_data_list[num + 1].strip())
+        index = num + 2
+        temp_list = list()
+        
+        while mesh_data_list[index].startswith(' M'):
+            temp_line = re.sub("\s+", ",", mesh_data_list[index].strip()).split(',')
+            for e in temp_line:
+                temp_list.append(e)
+            index += 1
+        GROUP_MA_dict[temp_MA] = temp_list
+
+
+###### Constrcuting all GROUP_NO
+GROUP_NO_dict = dict()
+for key in NoGO.keys():
+      temp_key = copy.copy(key)
+      temp_array_nodes = copy.copy(NoGO[key]) + 1 # Python starts at 0
+      temp_list_nodes = [f'N{num}' for num in temp_array_nodes]
+      GROUP_NO_dict[temp_key] = temp_list_nodes
+  
+
+
+#######################
+
+model = AFFE_MODELE(AFFE=_F(
+                        MODELISATION=('C_PLAN', ), # STRESS PLAN CONDITION
+                        #MODELISATION=('AXIS','AXIS_SI' ), 
+                        PHENOMENE='MECANIQUE',
+                        TOUT='OUI'),
+                        MAILLAGE=mesh)
+
+
+mat_ncc = DEFI_MATERIAU(ELAS=_F(E=Encc/Eecc,NU=Nuncc))
+mat_ecc = DEFI_MATERIAU(ELAS=_F(E=1,NU=Nuecc))
+
+  
+################### ASSIGN MATERIAL PROPERTIES TO EACH GROUP
+dct_pgA5 = dict()
+dct_pgA5i=[]
+dof5ii=0
+for key in GROUP_MA_dict['pgA5']:
+    dct_pgA5[key] = {                  
+		              'E':Eecc,
+		              'nu':Nuecc,  
+		              }
+    if dof5ii<=2:
+	    
+	    dct_pgA5i=np.append(dct_pgA5i,key)   
+	    dof5ii=dof5ii+1               
+
+
+dct_pgA2 = dict()
+for key in GROUP_MA_dict['pgA2']:
+    dct_pgA2[key] = {                  
+                      'E':Eecc,
+                      'nu':Nuncc,  
+                      }
+
+dct_pgA0 = dict()
+for key in GROUP_MA_dict['pgA0']:
+    dct_pgA0[key] = {                  
+                      'E':Eecc,
+                      'nu':Nuecc,  
+                      }
+
+dct_pgA3 = dict()
+for key in GROUP_MA_dict['pgA3']:
+    dct_pgA3[key] = {                  
+                      'E':Eecc,
+                      'nu':Nuncc,  
+                      }
+dct_pgA4 = dict()
+for key in GROUP_MA_dict['pgA4']:
+    dct_pgA4[key] = {                  
+                      'E':Encc,
+                      'nu':Nuecc,  
+                      }
+dct_pgA1 = dict()
+for key in GROUP_MA_dict['pgA1']:
+    dct_pgA1[key] = {                  
+                      'E':Encc,
+                      'nu':Nuecc,  
+                      }                      
+                      
+###################
+
+if iteration == 0: # all design domains ossified
+      dct_pgA1A4 = dict()
+      for key in GROUP_MA_dict['pgA1A4']:
+            dct_pgA1A4[key] = {
+                              'iteration': iteration,
+                              'E':Encc,
+                              'nu':Nuncc,
+                              'OI':0,
+                              'SXX':0,
+                              'update':'true',
+                              'new':'false',
+                              'niter':0
+                              }
+
+      fieldmat = AFFE_MATERIAU ( MAILLAGE = mesh,
+                        AFFE = (
+                             # _F(TOUT = 'OUI' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA0' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA2' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA3' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA1' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA4' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA5' , MATER = mat_ecc),
+                              ),
+                              INFO = 1,)
+
+      with open(elems_props_current, "w") as outfile:
+            json.dump(dct_pgA1A4, outfile)
+#mat_e01 = DEFI_MATERIAU(ELAS=_F(E=coefmat*Eecc,NU=Nuecc))
+            
+      listr = DEFI_LIST_REEL(DEBUT=0.0,
+                  INTERVALLE=_F(JUSQU_A=1.0, NOMBRE=20),
+                  INFO=2,
+                  )
+
+
+      funcRAMP = DEFI_FONCTION(NOM_PARA='INST',
+                        VALE=(0.0, 0.0, 1.0, 1.0))
+
+      load = AFFE_CHAR_MECA(
+                  FORCE_CONTOUR=_F(FY = F_Countour, GROUP_MA=('pgLoad', )),
+                  #FORCE_NODALE=_F(FY=Fy, GROUP_NO=('nodeFY', )),
+                  # PRES_REP= _F(GROUP_MA=('pgLoad'), PRES=PRESSURE,),
+                  #DDL_IMPO=_F(DY=-uyy,GROUP_MA=('pgLoad', )),
+                  #DDL_IMPO=_F(DY=-1,GROUP_NO=('nodeFY1', )),
+                  MODELE=model,
+                  )
+
+      bc = AFFE_CHAR_MECA(
+                  DDL_IMPO=(
+                        _F(DX=0.0,DY=0.0, GROUP_MA=('pgFixed', )),
+                        #_F(DX=0.0, GROUP_MA=('pgLoad', )),
+                        # _F(DX=0.0, DY=0.0, GROUP_NO=('nodeDxDY', )),
+                        # _F(DX=0.0, GROUP_MA=('pgSymA1','pgSymA2')),
+                        _F(DX=0.0, GROUP_MA=('pgSymA1','pgSymA2','pgSymA3','pgSymA4','pgSymA5')),
+                        _F(DX=0.0, GROUP_MA=('pgSymA11','pgSymA22','pgSymA33','pgSymA44','pgSymA55')),
+                        ),
+                  #LIAISON_SOLIDE =_F (GROUP_MA='pgLoad',DIST_MIN = 0.001,),
+                  #LIAISON_DDL =_F (GROUP_NO = ('nodeFY', 'nodeFY2'),DDL = ('DY', 'DY'),COEF_MULT = (1. , -1.), COEF_IMPO = 0. ,),
+                  MODELE=model,
+                        )
+
+# Standard contact method copied from Salome "Add Stage with assistant"
+      contact = DEFI_CONTACT(
+                  ALGO_RESO_CONT='NEWTON', 
+                  FORMULATION='CONTINUE',  
+                  MODELE=model, 
+                  ZONE=_F(ALGO_CONT='STANDARD',
+                              CONTACT_INIT='INTERPENETRE', 
+                              GROUP_MA_ESCL='pgCtA2', 
+                              GROUP_MA_MAIT='pgCtA3',
+                              # INTEGRATION='GAUSS',
+                              ),
+                   INFO=1,
+                        ) 
+
+      resnonl = STAT_NON_LINE(CHAM_MATER=fieldmat,
+                        CONTACT=contact,
+                        EXCIT=(_F(CHARGE=bc),
+                               _F(CHARGE=load,
+                                  FONC_MULT=funcRAMP)),
+                        INCREMENT=_F(LIST_INST=listr),
+                        METHODE='NEWTON',
+                        CONVERGENCE=_F(ITER_GLOB_MAXI=105,),
+                        MODELE=model,
+                        NEWTON=_F(REAC_ITER=1))
+
+      resnonl = CALC_CHAMP(reuse=resnonl,
+                  CONTRAINTE=('SIEF_ELNO', 'SIEF_NOEU', 'SIGM_ELNO'),
+                  RESULTAT=resnonl)
+
+#########################################################################
+#                                                                       
+#     Calculation of Octahedral Stresses                       
+#                                                                       
+#########################################################################
+
+
+      Sh = '(sqrt(((SIXX+SIYY+SIZZ)/3)**2))' 
+      So = '(sqrt((SIXX-SIYY)**2+(SIYY-SIZZ)**2+(SIZZ-SIXX)**2))/3' 
+
+      s_h = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=Sh)
+
+      s_o = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=So)
+
+      sixx = 'SIXX'
+      siyy = 'SIYY'
+      sizz = 'SIZZ'
+      sixy = 'SIXY'
+      smises = 'sqrt(1/2*(SIXX-SIYY)**2+1/2*(SIYY-SIZZ)**2+1/2*(SIXX-SIZZ)**2+3*(SIXY)**2)' 
+
+      s_xx = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sixx)
+      s_yy = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=siyy)
+      s_zz = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sizz)
+      s_xy = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sixy)
+      s_mises = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=smises)
+
+
+
+      resnonl = CALC_CHAMP(reuse=resnonl,
+                  CONTRAINTE=('SIGM_ELGA','SIGM_NOEU'),
+                  DEFORMATION=('EPSI_ELGA'),
+                  ENERGIE=('ETOT_ELEM'),
+                  GROUP_MA=('TOTAL'),
+                  FORCE=('FORC_NODA'),
+                  CHAM_UTIL=(_F(NOM_CHAM='SIGM_ELNO',
+                              FORMULE=(s_h,s_o,s_xx,s_yy,s_zz,s_xy,s_mises),
+                              NUME_CHAM_RESU=2,),
+                              _F(NOM_CHAM='SIGM_NOEU',
+                              FORMULE=(s_h,s_o,s_xx,s_yy,s_zz,s_xy,s_mises),
+                              NUME_CHAM_RESU=2,)),
+                  LIST_INST=listr,
+                  RESULTAT=resnonl)
+
+
+           
+        
+
+      champ = CREA_CHAMP (TYPE_CHAM = 'NOEU_NEUT_R', 
+                  OPERATION='EXTR',
+                  RESULTAT=resnonl,
+                  INFO=2,
+                  NOM_CHAM='UT02_NOEU',
+                  INST=1.0)
+
+      champ2 = CREA_CHAMP (TYPE_CHAM = 'ELEM_ENER_R', 
+                  OPERATION='EXTR',
+                  RESULTAT=resnonl,
+                  INFO=2,
+                  NOM_CHAM='ETOT_ELEM',
+                  INST=1.0)
+                  
+
+
+
+      shh = champ.EXTR_COMP('X1',['TOTAL']).valeurs.tolist()
+      soo = champ.EXTR_COMP('X2',['TOTAL']).valeurs.tolist()
+      si_xx = champ.EXTR_COMP('X3',['TOTAL']).valeurs.tolist()
+      si_yy = champ.EXTR_COMP('X4',['TOTAL']).valeurs.tolist()
+      si_zz = champ.EXTR_COMP('X5',['TOTAL']).valeurs.tolist()
+      si_xy = champ.EXTR_COMP('X6',['TOTAL']).valeurs.tolist()
+      si_misses = champ.EXTR_COMP('X7',['TOTAL']).valeurs.tolist()
+    
+      shh_soo = [{"soo":soo[index],"shh":shh[index]} for index in range(len(shh))]
+
+
+
+      dct_stress_nodes = {
+                  'SIXX' : si_xx,
+                  'SIYY' : si_yy,
+                  'SIZZ' : si_zz,
+                  'SIXY' : si_xy,
+                  'SHH' : shh,
+                  'SOO' : soo,
+                  'shh_soo':shh_soo,
+                  'si_misses':si_misses
+                  }
+
+      with open(folder_file_main+fichier_folderv+"/dct_stress_nodeso.json", "w") as outfile:
+             json.dump(dct_stress_nodes, outfile)   
+
+
+#########################################################################
+#                                                                       
+#     
+#           LAGS_C 
+#                                                                
+#########################################################################
+      cont_p = CALC_PRESSION(GEOMETRIE='DEFORMEE',
+                         GROUP_MA=('pgCtA2', ),
+                         INST=(1.0, ),
+                         MAILLAGE=mesh,
+                         INFO = 2,
+                         RESULTAT=resnonl,)
+
+
+      pressField = cont_p.EXTR_COMP('LAGS_C', [], topo=1).valeurs.tolist()
+
+
+# Get table of contact pressure (###printable with IMPR_TABLE)
+      tr_cont = POST_RELEVE_T(ACTION = (_F(INTITULE = 'Contact ' +
+                                                'pressure',
+                                     OPERATION = 'EXTRACTION',
+                                     GROUP_NO = 'pgCtA2',
+                                     CHAM_GD = cont_p,
+                                     NOM_CMP = ('LAGS_C'))))
+
+# Extract p(x)
+      func_con = RECU_FONCTION(PARA_X = 'COOR_X',
+                         PARA_Y = 'LAGS_C',
+                         TABLE = tr_cont)
+
+# p(x) as a table
+      tb_cont = CREA_TABLE(FONCTION = _F(FONCTION = func_con))
+
+# Dictionary of p(x)
+      dct_ct_nodes = tb_cont.EXTR_TABLE().values()
+
+      cp_values = {round(float(dct_ct_nodes['COOR_X'][i]),2):round(Eecc*abs(dct_ct_nodes['LAGS_C'][i]),2) for i in range(len(dct_ct_nodes['COOR_X']))}
+      cp_values['energy_defor']=Eecc*np.sum(champ2.EXTR_COMP('TOTALE',['TOTAL']).valeurs.tolist())
+      cp_values['s_mises_max']=Eecc*np.max(si_misses)
+
+# Export contact pressure and coordinates for postprocessing
+
+      with open(folder_file_main+fichier_folderv+"/cpo.json", "w") as outfile:
+             json.dump(cp_values, outfile)    
+
+
+
+
+elif iteration == 1:# all design domains unossified (initial iteration)
+      with open(elems_props_current, 'r') as json_file:
+            dct_pgA1A4o = json.load(json_file)
+
+      dct_pgA1A4 = dict()
+      for key in GROUP_MA_dict['pgA1A4']:
+            dct_pgA1A4[key] = {
+                              'iteration': iteration,
+                              'E':Encc,
+                              'nu':Nuncc,
+                              'OI':0,
+                              'SXX':0,
+                              'update':'true',
+                              'new':'false',
+                              'niter':0
+                              }
+
+      fieldmat = AFFE_MATERIAU ( MAILLAGE = mesh,
+                        AFFE = (
+                             # _F(TOUT = 'OUI' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA0' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA2' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA3' , MATER = mat_ecc),
+                              _F(GROUP_MA = 'pgA1' , MATER = mat_ncc),
+                              _F(GROUP_MA = 'pgA4' , MATER = mat_ncc),
+                              _F(GROUP_MA = 'pgA5' , MATER = mat_ecc),
+                              ),
+                              INFO = 1,)
+
+      with open(elems_props_current, "w") as outfile:
+            json.dump(dct_pgA1A4, outfile)
+#mat_e01 = DEFI_MATERIAU(ELAS=_F(E=coefmat*Eecc,NU=Nuecc))
+            
+      listr = DEFI_LIST_REEL(DEBUT=0.0,
+                  INTERVALLE=_F(JUSQU_A=1.0, NOMBRE=20),
+                  INFO=2,
+                  )
+
+
+      funcRAMP = DEFI_FONCTION(NOM_PARA='INST',
+                        VALE=(0.0, 0.0, 1.0, 1.0))
+
+      load = AFFE_CHAR_MECA(
+                  FORCE_CONTOUR=_F(FY = F_Countour, GROUP_MA=('pgLoad', )),
+                  #FORCE_NODALE=_F(FY=Fy, GROUP_NO=('nodeFY', )),
+                  # PRES_REP= _F(GROUP_MA=('pgLoad'), PRES=PRESSURE,),
+                  #DDL_IMPO=_F(DY=-uyy,GROUP_MA=('pgLoad', )),
+                  #DDL_IMPO=_F(DY=-1,GROUP_NO=('nodeFY1', )),
+                  MODELE=model,
+                  )
+
+      bc = AFFE_CHAR_MECA(
+                  DDL_IMPO=(
+                        _F(DX=0.0,DY=0.0, GROUP_MA=('pgFixed', )),
+                        #_F(DX=0.0, GROUP_MA=('pgLoad', )),
+                        # _F(DX=0.0, DY=0.0, GROUP_NO=('nodeDxDY', )),
+                        # _F(DX=0.0, GROUP_MA=('pgSymA1','pgSymA2')),
+                        _F(DX=0.0, GROUP_MA=('pgSymA1','pgSymA2','pgSymA3','pgSymA4','pgSymA5')),
+                        _F(DX=0.0, GROUP_MA=('pgSymA11','pgSymA22','pgSymA33','pgSymA44','pgSymA55')),
+                        ),
+                  #LIAISON_SOLIDE =_F (GROUP_MA='pgLoad',DIST_MIN = 0.001,),
+                  #LIAISON_DDL =_F (GROUP_NO = ('nodeFY', 'nodeFY2'),DDL = ('DY', 'DY'),COEF_MULT = (1. , -1.), COEF_IMPO = 0. ,),
+                  MODELE=model,
+                        )
+
+# Standard contact method copied from Salome "Add Stage with assistant"
+      contact = DEFI_CONTACT(
+                  ALGO_RESO_CONT='NEWTON', 
+                  FORMULATION='CONTINUE',  
+                  MODELE=model, 
+                  ZONE=_F(ALGO_CONT='STANDARD',
+                              CONTACT_INIT='INTERPENETRE', 
+                              GROUP_MA_ESCL='pgCtA2', 
+                              GROUP_MA_MAIT='pgCtA3',
+                              # INTEGRATION='GAUSS',
+                              ),
+                   INFO=1,
+                        ) 
+
+      resnonl = STAT_NON_LINE(CHAM_MATER=fieldmat,
+                        CONTACT=contact,
+                        EXCIT=(_F(CHARGE=bc),
+                               _F(CHARGE=load,
+                                  FONC_MULT=funcRAMP)),
+                        INCREMENT=_F(LIST_INST=listr),
+                        METHODE='NEWTON',
+                        CONVERGENCE=_F(ITER_GLOB_MAXI=105,),
+                        MODELE=model,
+                        NEWTON=_F(REAC_ITER=1))
+
+      resnonl = CALC_CHAMP(reuse=resnonl,
+                  CONTRAINTE=('SIEF_ELNO', 'SIEF_NOEU', 'SIGM_ELNO'),
+                  RESULTAT=resnonl)
+
+#########################################################################
+#                                                                       
+#     Calculation of Octahedral Stresses                       
+#                                                                       
+#########################################################################
+
+
+      Sh = '(sqrt(((SIXX+SIYY+SIZZ)/3)**2))' 
+      So = '(sqrt((SIXX-SIYY)**2+(SIYY-SIZZ)**2+(SIZZ-SIXX)**2))/3' 
+
+      s_h = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=Sh)
+
+      s_o = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=So)
+
+      sixx = 'SIXX'
+      siyy = 'SIYY'
+      sizz = 'SIZZ'
+      sixy = 'SIXY'
+      smises = 'sqrt(1/2*(SIXX-SIYY)**2+1/2*(SIYY-SIZZ)**2+1/2*(SIXX-SIZZ)**2+3*(SIXY)**2)' 
+
+      s_xx = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sixx)
+      s_yy = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=siyy)
+      s_zz = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sizz)
+      s_xy = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sixy)
+      s_mises = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=smises)
+
+
+
+      resnonl = CALC_CHAMP(reuse=resnonl,
+                  CONTRAINTE=('SIGM_ELGA','SIGM_NOEU'),
+                  DEFORMATION=('EPSI_ELGA'),
+                  ENERGIE=('ETOT_ELEM'),
+                  GROUP_MA=('TOTAL'),
+                  FORCE=('FORC_NODA'),
+                  CHAM_UTIL=(_F(NOM_CHAM='SIGM_ELNO',
+                              FORMULE=(s_h,s_o,s_xx,s_yy,s_zz,s_xy,s_mises),
+                              NUME_CHAM_RESU=2,),
+                              _F(NOM_CHAM='SIGM_NOEU',
+                              FORMULE=(s_h,s_o,s_xx,s_yy,s_zz,s_xy,s_mises),
+                              NUME_CHAM_RESU=2,)),
+                  LIST_INST=listr,
+                  RESULTAT=resnonl)
+
+
+           
+        
+
+      champ = CREA_CHAMP (TYPE_CHAM = 'NOEU_NEUT_R', 
+                  OPERATION='EXTR',
+                  RESULTAT=resnonl,
+                  INFO=2,
+                  NOM_CHAM='UT02_NOEU',
+                  INST=1.0)
+
+      champ2 = CREA_CHAMP (TYPE_CHAM = 'ELEM_ENER_R', 
+                  OPERATION='EXTR',
+                  RESULTAT=resnonl,
+                  INFO=2,
+                  NOM_CHAM='ETOT_ELEM',
+                  INST=1.0)
+                  
+
+
+
+      shh = champ.EXTR_COMP('X1',['TOTAL']).valeurs.tolist()
+      soo = champ.EXTR_COMP('X2',['TOTAL']).valeurs.tolist()
+      si_xx = champ.EXTR_COMP('X3',['TOTAL']).valeurs.tolist()
+      si_yy = champ.EXTR_COMP('X4',['TOTAL']).valeurs.tolist()
+      si_zz = champ.EXTR_COMP('X5',['TOTAL']).valeurs.tolist()
+      si_xy = champ.EXTR_COMP('X6',['TOTAL']).valeurs.tolist()
+      si_misses = champ.EXTR_COMP('X7',['TOTAL']).valeurs.tolist()
+    
+      shh_soo = [{"soo":soo[index],"shh":shh[index]} for index in range(len(shh))]
+
+
+
+      dct_stress_nodes = {
+                  'SIXX' : si_xx,
+                  'SIYY' : si_yy,
+                  'SIZZ' : si_zz,
+                  'SIXY' : si_xy,
+                  'SHH' : shh,
+                  'SOO' : soo,
+                  'shh_soo':shh_soo,
+                  'si_misses':si_misses
+                  }
+
+      with open(folder_file_main+fichier_folderv+"/dct_stress_nodeso.json", "w") as outfile:
+             json.dump(dct_stress_nodes, outfile)   
+
+
+#########################################################################
+#                                                                       
+#     
+#           LAGS_C 
+#                                                                
+#########################################################################
+      cont_p = CALC_PRESSION(GEOMETRIE='DEFORMEE',
+                         GROUP_MA=('pgCtA2', ),
+                         INST=(1.0, ),
+                         MAILLAGE=mesh,
+                         INFO = 2,
+                         RESULTAT=resnonl,)
+
+
+      pressField = cont_p.EXTR_COMP('LAGS_C', [], topo=1).valeurs.tolist()
+
+
+# Get table of contact pressure (###printable with IMPR_TABLE)
+      tr_cont = POST_RELEVE_T(ACTION = (_F(INTITULE = 'Contact ' +
+                                                'pressure',
+                                     OPERATION = 'EXTRACTION',
+                                     GROUP_NO = 'pgCtA2',
+                                     CHAM_GD = cont_p,
+                                     NOM_CMP = ('LAGS_C'))))
+
+# Extract p(x)
+      func_con = RECU_FONCTION(PARA_X = 'COOR_X',
+                         PARA_Y = 'LAGS_C',
+                         TABLE = tr_cont)
+
+# p(x) as a table
+      tb_cont = CREA_TABLE(FONCTION = _F(FONCTION = func_con))
+
+# Dictionary of p(x)
+      dct_ct_nodes = tb_cont.EXTR_TABLE().values()
+
+      cp_values = {round(float(dct_ct_nodes['COOR_X'][i]),2):round(Eecc*abs(dct_ct_nodes['LAGS_C'][i]),2) for i in range(len(dct_ct_nodes['COOR_X']))}
+      cp_values['energy_defor']=Eecc*np.sum(champ2.EXTR_COMP('TOTALE',['TOTAL']).valeurs.tolist())
+      cp_values['s_mises_max']=Eecc*np.max(si_misses)
+
+# Export contact pressure and coordinates for postprocessing
+
+      with open(folder_file_main+fichier_folderv+"/cpo.json", "w") as outfile:
+             json.dump(cp_values, outfile)    
+
+
+
+
+else:# APPLY OSSIFICATION PROCESS
+      
+      
+      
+      with open(elems_props_current, 'r') as json_file:
+            dct_pgA1A4 = json.load(json_file)
+
+
+
+      
+      lst_new=[]
+      lst_new1 = []
+      lst_new2 = []
+     
+      
+      
+      for key in dct_pgA1A4:
+          if dct_pgA1A4[key]['E']==Encc: #key in dct_pgA1 and 
+               lst_new1.append(key)
+                  
+  
+               
+                                                                      
+      lst_new.append(lst_new1)   
+      
+      
+      
+      lst_new1 = np.unique(lst_new1)
+        
+      
+      ikk=0
+      if len(lst_new1)==0:
+          
+            ikk=ikk+1 
+            lst_new1=copy.copy(dct_pgA5i)
+            mati1=copy.copy(mat_ecc0)
+                  
+            
+ 
+                                   
+      if len(lst_new) == 0:
+            fieldmat = AFFE_MATERIAU ( MAILLAGE = mesh,
+                              AFFE = (
+		                     _F(TOUT = 'OUI' , MATER = mat_ecc),
+		                     _F(GROUP_MA = 'pgA0' , MATER = mat_ecc),
+		                     _F(GROUP_MA = 'pgA2' , MATER = mat_ecc),
+		                     _F(GROUP_MA = 'pgA3' , MATER = mat_ecc),
+                                    _F(GROUP_MA = 'pgA1' , MATER = mat_ecc),
+                                    _F(GROUP_MA = 'pgA4' , MATER = mat_ecc),
+                                    _F(GROUP_MA = 'pgA5' , MATER = mat_ecc),
+                                    ),
+                                    INFO = 1,)
+      else:
+
+             mat_eccn=DEFI_MATERIAU(ELAS=_F(E=Eecc,NU=Nuecc))
+             eelemennt1={'MAILLE':lst_new,'MATER':mat_eccn}
+            
+             fieldmat = AFFE_MATERIAU ( MAILLAGE = mesh,
+		              AFFE = (
+		                    _F(TOUT = 'OUI' , MATER = mat_ecc),
+		                    _F(GROUP_MA = 'pgA0' , MATER = mat_ecc),
+                                   _F(GROUP_MA = 'pgA4' , MATER = mat_ecc),
+                                   _F(GROUP_MA = 'pgA3' , MATER = mat_ecc),
+                                   _F(GROUP_MA = 'pgA2' , MATER = mat_ecc),
+		                    _F(GROUP_MA = 'pgA1A4' , MATER = mat_ecc),
+		                    _F(GROUP_MA = 'pgA5' , MATER = mat_ecc),		                  
+		                    _F(MAILLE= lst_new1, MATER = mat_ncc,),  # This option works perfectly
+
+		                    ))
+        
+
+            
+      listr = DEFI_LIST_REEL(DEBUT=0.0,
+                  INTERVALLE=_F(JUSQU_A=1.0, NOMBRE=20),
+                  INFO=2,
+                  )
+
+
+      funcRAMP = DEFI_FONCTION(NOM_PARA='INST',
+                        VALE=(0.0, 0.0, 1.0, 1.0))
+
+      load = AFFE_CHAR_MECA(
+                  FORCE_CONTOUR=_F(FY = F_Countour, GROUP_MA=('pgLoad', )),
+                  #FORCE_NODALE=_F(FY=Fy, GROUP_NO=('nodeFY', )),
+                  # PRES_REP= _F(GROUP_MA=('pgLoad'), PRES=PRESSURE,),
+                  #DDL_IMPO=_F(DY=-uyy,GROUP_MA=('pgLoad', )),
+                  #DDL_IMPO=_F(DY=-1,GROUP_NO=('nodeFY1', )),
+                  MODELE=model,
+                  )
+
+      bc = AFFE_CHAR_MECA(
+                  DDL_IMPO=(
+                        _F(DX=0.0,DY=0.0, GROUP_MA=('pgFixed', )),
+                        #_F(DX=0.0, GROUP_MA=('pgLoad', )),
+                        # _F(DX=0.0, DY=0.0, GROUP_NO=('nodeDxDY', )),
+                        # _F(DX=0.0, GROUP_MA=('pgSymA1','pgSymA2')),
+                        _F(DX=0.0, GROUP_MA=('pgSymA1','pgSymA2','pgSymA3','pgSymA4','pgSymA5')),
+                        _F(DX=0.0, GROUP_MA=('pgSymA11','pgSymA22','pgSymA33','pgSymA44','pgSymA55')),
+                        ),
+                  #LIAISON_SOLIDE =_F (GROUP_MA='pgLoad',DIST_MIN = 0.001,),
+                  #LIAISON_DDL =_F (GROUP_NO = ('nodeFY', 'nodeFY2'),DDL = ('DY', 'DY'),COEF_MULT = (1. , -1.), COEF_IMPO = 0. ,),
+                  MODELE=model,
+                        )
+
+# Standard contact method copied from Salome "Add Stage with assistant"
+
+      contact = DEFI_CONTACT(
+                  ALGO_RESO_CONT='NEWTON', 
+                  FORMULATION='CONTINUE',  
+                  MODELE=model, 
+                  ZONE=_F(ALGO_CONT='STANDARD',
+                              CONTACT_INIT='INTERPENETRE', 
+                              GROUP_MA_ESCL='pgCtA2', 
+                              GROUP_MA_MAIT='pgCtA3',
+                              # INTEGRATION='GAUSS',
+                              ),
+                   INFO=1,
+                        ) 
+
+      resnonl = STAT_NON_LINE(CHAM_MATER=fieldmat,
+                        CONTACT=contact,
+                        EXCIT=(_F(CHARGE=bc),
+                               _F(CHARGE=load,
+                                  FONC_MULT=funcRAMP)),
+                        INCREMENT=_F(LIST_INST=listr),
+                        METHODE='NEWTON',
+                        CONVERGENCE=_F(ITER_GLOB_MAXI=105,),
+                        MODELE=model,
+                        NEWTON=_F(REAC_ITER=1))
+
+      resnonl = CALC_CHAMP(reuse=resnonl,
+                  CONTRAINTE=('SIEF_ELNO', 'SIEF_NOEU', 'SIGM_ELNO'),
+                  RESULTAT=resnonl)
+
+#########################################################################
+#                                                                       
+#     Calculation of Octahedral Stresses                       
+#                                                                       
+#########################################################################
+
+
+      Sh = '(sqrt(((SIXX+SIYY+SIZZ)/3)**2))' 
+      So = '(sqrt((SIXX-SIYY)**2+(SIYY-SIZZ)**2+(SIZZ-SIXX)**2))/3' 
+
+      s_h = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=Sh)
+
+      s_o = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=So)
+
+      sixx = 'SIXX'
+      siyy = 'SIYY'
+      sizz = 'SIZZ'
+      sixy = 'SIXY'
+      smises = 'sqrt(1/2*(SIXX-SIYY)**2+1/2*(SIYY-SIZZ)**2+1/2*(SIXX-SIZZ)**2+3*(SIXY)**2)' 
+
+      s_xx = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sixx)
+      s_yy = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=siyy)
+      s_zz = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sizz)
+      s_xy = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=sixy)
+      s_mises = FORMULE(NOM_PARA=('SIXX','SIYY','SIZZ','SIXY'),
+            VALE=smises)
+
+
+
+      resnonl = CALC_CHAMP(reuse=resnonl,
+                  CONTRAINTE=('SIGM_ELGA','SIGM_NOEU'),
+                  DEFORMATION=('EPSI_ELGA'),
+                  ENERGIE=('ETOT_ELEM'),
+                  GROUP_MA=('TOTAL'),
+                  FORCE=('FORC_NODA'),
+                  CHAM_UTIL=(_F(NOM_CHAM='SIGM_ELNO',
+                              FORMULE=(s_h,s_o,s_xx,s_yy,s_zz,s_xy,s_mises),
+                              NUME_CHAM_RESU=2,),
+                              _F(NOM_CHAM='SIGM_NOEU',
+                              FORMULE=(s_h,s_o,s_xx,s_yy,s_zz,s_xy,s_mises),
+                              NUME_CHAM_RESU=2,)),
+                  LIST_INST=listr,
+                  RESULTAT=resnonl)
+
+
+           
+        
+
+      champ = CREA_CHAMP (TYPE_CHAM = 'NOEU_NEUT_R', 
+                  OPERATION='EXTR',
+                  RESULTAT=resnonl,
+                  INFO=2,
+                  NOM_CHAM='UT02_NOEU',
+                  INST=1.0)
+
+      champ2 = CREA_CHAMP (TYPE_CHAM = 'ELEM_ENER_R', 
+                  OPERATION='EXTR',
+                  RESULTAT=resnonl,
+                  INFO=2,
+                  NOM_CHAM='ETOT_ELEM',
+                  INST=1.0)
+                  
+
+
+
+      shh = champ.EXTR_COMP('X1',['TOTAL']).valeurs.tolist()
+      soo = champ.EXTR_COMP('X2',['TOTAL']).valeurs.tolist()
+      si_xx = champ.EXTR_COMP('X3',['TOTAL']).valeurs.tolist()
+      si_yy = champ.EXTR_COMP('X4',['TOTAL']).valeurs.tolist()
+      si_zz = champ.EXTR_COMP('X5',['TOTAL']).valeurs.tolist()
+      si_xy = champ.EXTR_COMP('X6',['TOTAL']).valeurs.tolist()
+      si_misses = champ.EXTR_COMP('X7',['TOTAL']).valeurs.tolist()
+    
+      shh_soo = [{"soo":soo[index],"shh":shh[index]} for index in range(len(shh))]
+
+
+
+      dct_stress_nodes = {
+                  'SIXX' : si_xx,
+                  'SIYY' : si_yy,
+                  'SIZZ' : si_zz,
+                  'SIXY' : si_xy,
+                  'SHH' : shh,
+                  'SOO' : soo,
+                  'shh_soo':shh_soo,
+                  'si_misses':si_misses
+                  }
+
+
+
+
+#########################################################################
+#                                                                       
+#     
+#           LAGS_C 
+#                                                                
+#########################################################################
+      cont_p = CALC_PRESSION(GEOMETRIE='DEFORMEE',
+                         GROUP_MA=('pgCtA2', ),
+                         INST=(1.0, ),
+                         MAILLAGE=mesh,
+                         INFO = 2,
+                         RESULTAT=resnonl,)
+
+
+      pressField = cont_p.EXTR_COMP('LAGS_C', [], topo=1).valeurs.tolist()
+
+
+# Get table of contact pressure (###printable with IMPR_TABLE)
+      tr_cont = POST_RELEVE_T(ACTION = (_F(INTITULE = 'Contact ' +
+                                                'pressure',
+                                     OPERATION = 'EXTRACTION',
+                                     GROUP_NO = 'pgCtA2',
+                                     CHAM_GD = cont_p,
+                                     NOM_CMP = ('LAGS_C'))))
+
+# Extract p(x)
+      func_con = RECU_FONCTION(PARA_X = 'COOR_X',
+                         PARA_Y = 'LAGS_C',
+                         TABLE = tr_cont)
+
+# p(x) as a table
+      tb_cont = CREA_TABLE(FONCTION = _F(FONCTION = func_con))
+
+# Dictionary of p(x)
+      dct_ct_nodes = tb_cont.EXTR_TABLE().values()
+
+      cp_values = {round(float(dct_ct_nodes['COOR_X'][i]),2):round(Eecc*abs(dct_ct_nodes['LAGS_C'][i]),2) for i in range(len(dct_ct_nodes['COOR_X']))}
+      cp_values['energy_defor']=Eecc*np.sum(champ2.EXTR_COMP('TOTALE',['TOTAL']).valeurs.tolist())
+      cp_values['s_mises_max']=Eecc*np.max(si_misses)
+      
+
+# Export contact pressure and coordinates for postprocessing
+
+#%%
+
+shh_soo_nodes = dict()
+si_xx_nodes = dict()
+si_yy_nodes = dict()
+si_zz_nodes = dict()
+si_xy_nodes = dict()
+si_misses_nodes = dict()
+
+
+
+dct_stress_elems = dict()
+
+for index in range(len(shh)):
+      shh_soo_nodes[GROUP_NO_dict['TOTAL'][index]] = shh_soo[index]
+      si_xx_nodes[GROUP_NO_dict['TOTAL'][index]] = si_xx[index]
+      si_yy_nodes[GROUP_NO_dict['TOTAL'][index]] = si_yy[index]
+      si_zz_nodes[GROUP_NO_dict['TOTAL'][index]] = si_zz[index]
+      si_xy_nodes[GROUP_NO_dict['TOTAL'][index]] = si_xy[index]
+      si_misses_nodes[GROUP_NO_dict['TOTAL'][index]] = si_misses[index]
+
+      
+  
+      
+shh_soo_elems = dict()
+si_xx_elems = list()
+si_yy_elems = list()
+si_zz_elems = list()
+si_xy_elems = list()
+si_misses_elems = list()
+
+
+for index in range(len(connec)):
+      nodes = connec[index]
+      nNodes = len(nodes)
+      temp_shh = 0
+      temp_soo = 0
+      temp_si_xx = 0
+      temp_si_yy = 0
+      temp_si_zz = 0
+      temp_si_xy = 0
+      temp_si_misses = 0
+      for node in nodes:
+            temp_node = f'N{node + 1}'
+            temp_soo += shh_soo_nodes[temp_node]['soo']
+            temp_shh += shh_soo_nodes[temp_node]['shh']
+            temp_si_xx += si_xx_nodes[temp_node]
+            temp_si_yy += si_yy_nodes[temp_node]
+            temp_si_zz += si_zz_nodes[temp_node]
+            temp_si_xy += si_xy_nodes[temp_node]
+            temp_si_misses += si_misses_nodes[temp_node]
+      shh_ele = temp_shh/nNodes
+      soo_ele = temp_soo/nNodes
+      si_xx_ele = temp_si_xx/nNodes
+      si_yy_ele = temp_si_yy/nNodes
+      si_zz_ele = temp_si_zz/nNodes
+      si_xy_ele = temp_si_xy/nNodes
+      si_misses_ele = temp_si_misses/nNodes
+  
+  
+      shh_ele= principal_Stress_calcsh(si_xx_ele,si_yy_ele,si_xy_ele)
+      oi_ele =principal_Stress_calc(si_xx_ele,si_yy_ele,si_xy_ele)
+      soo_ele=principal_Stress_calc_soo(si_xx_ele,si_yy_ele,si_xy_ele)
+
+
+      if GROUP_MA_dict['TOTAL'][index] in dct_pgA1A4:
+         shh_soo_elems[GROUP_MA_dict['TOTAL'][index]] = {'SOO':Eecc*soo_ele,'SHH':Eecc*shh_ele, 'OI': Eecc*oi_ele,'SXX':Eecc*si_xx_ele}
+      else:
+         shh_soo_elems[GROUP_MA_dict['TOTAL'][index]] = {'SOO':Eecc*soo_ele,'SHH':Eecc*shh_ele, 'OI': Eecc*oi_ele,'SXX':Eecc*si_xx_ele}
+      si_xx_elems.append(Eecc*si_xx_ele)
+      si_yy_elems.append(Eecc*si_yy_ele)
+      si_zz_elems.append(Eecc*si_zz_ele)
+      si_xy_elems.append(Eecc*si_xy_ele)
+      si_misses_elems.append(Eecc*si_misses_ele)
+
+   
+
+
+dct_stress_elems['SIXX'] = si_xx_elems
+dct_stress_elems['SIYY'] = si_yy_elems
+dct_stress_elems['SIZZ'] = si_zz_elems
+dct_stress_elems['SIXY'] = si_xy_elems
+dct_stress_elems['SIMISSES'] = si_misses_elems
+
+#
+for key3 in dct_pgA1A4:
+
+      if iteration==0:
+
+                  dct_pgA1A4[key3]['E']=Eecc
+      if iteration==1:
+
+                  dct_pgA1A4[key3]['E']=Encc    
+   
+# OI for design domains
+
+for key2 in dct_pgA1A4:
+
+      if iteration<=1:
+                  dct_pgA1A4[key2]['OIn'] = round((shh_soo_elems[key2]['OI']),2)  
+                  dct_pgA1A4[key2]['OI']= 1*dct_pgA1A4[key2]['OIn']   
+      if iteration>1:
+                  dct_pgA1A4[key2]['OIn'] = dct_pgA1A4[key2]['OIn']+round((shh_soo_elems[key2]['OI']),2)    
+                  dct_pgA1A4[key2]['OI']= dct_pgA1A4[key2]['OIn']/iteration  
+
+
+      #dct_pgA1A4[key2]['OI'] = round((shh_soo_elems[key2]['OI']),2)
+
+#%%
+#########################################################################
+#                                                                       
+#               FIND OI THRESHOLD                  
+#                                                                       
+#########################################################################
+#%% find OI max and min
+
+maxoi1=-50000
+minoi1=50000
+maxoi4=-50000
+minoi4=50000
+
+nele1=0
+nele4=0
+for key2 in dct_pgA1A4:
+     
+      if key2 in dct_pgA1 and dct_pgA1A4[key2]['E']==Encc:
+                  
+                  maxoi1=max(maxoi1,dct_pgA1A4[key2]['OI'])
+                  minoi1=min(minoi1,dct_pgA1A4[key2]['OI']) 
+                  nele1=nele1+1
+
+      if key2 in dct_pgA4 and dct_pgA1A4[key2]['E']==Encc:
+                  
+                  maxoi4=max(maxoi4,dct_pgA1A4[key2]['OI'])
+                  minoi4=min(minoi4,dct_pgA1A4[key2]['OI'])    
+                  nele4=nele4+1   
+if iteration<=1:
+      maxoi1=max(maxoi1,maxoi4)
+      minoi1=min(minoi1,minoi4)
+
+#%% find OI threshold corresponding to the minimum percentage of elements ossified at the initial iteration
+
+
+hmin=0
+oimaxc=0.99
+if iteration==0:
+      oi_seuil=minoi1+oimaxc*(maxoi1-minoi1)
+ 
+
+while hmin<koimin and iteration==1:
+      oimaxc=oimaxc-0.005
+      oi_seuil=minoi1+oimaxc*(maxoi1-minoi1)
+      lst_old1=[] 
+      lst_old4=[] 
+      for key in dct_pgA1A4:
+       if dct_pgA1A4[key]['OI']>=oi_seuil and key in dct_pgA1: 
+
+          lst_old1=np.append(lst_old1,key)    				      
+       if dct_pgA1A4[key]['OI']>=oi_seuil and key in dct_pgA4: 				         
+          lst_old4=np.append(lst_old4,key)	                            
+      
+      hmin=find_percent_oi(lst_old1,lst_old4,nele1,nele4)
+
+#%% find OI threshold to ensure that there are  elements ossified at the second iteration
+
+      
+if iteration==2:
+
+      with open("/home/majnooni/VanVuongLAI/code_lai_contact_plane_plane_understressplane/oi_seuil.json") as inputi:
+	      oi_seuilt = json.load(inputi)   
+    				   
+      oi_seuil_iter1=oi_seuilt["oi_seuil"]
+      
+      dct_pgA1A4_1=copy.copy(dct_pgA1A4)
+      coefiii=0.99
+      
+
+      with open("/home/majnooni/VanVuongLAI/code_lai_contact_plane_plane_understressplane/ossirate.json") as inputi:
+              ossirate = json.load(inputi)   
+      ossiratet=ossirate["ossirate"]
+      
+      oi_seuil=minoi1+coefiii*(maxoi1-minoi1) 
+      nele14=0
+      nele14_old=0
+      for key in  dct_pgA1A4_1:
+              nele14=nele14+1    
+              if dct_pgA1A4_1[key]['OI']>=oi_seuil or dct_pgA1A4_1[key]['E']==Eecc:  #key in dct_pgA1 and    
+		                    nele14_old=nele14_old+1 
+      		                    	                    
+      while np.abs(nele14_old/nele14-ossiratet)<=0.02 and nele14_old/nele14<1:
+              coefiii=coefiii-0.002
+              #print(coefiii)
+              oi_seuil=minoi1+coefiii*(maxoi1-minoi1)    
+              nele14=0
+              nele14_old=0      
+              for key in  dct_pgA1A4_1:	      
+		                    nele14=nele14+1 	    
+		                    if dct_pgA1A4_1[key]['OI']>=oi_seuil or dct_pgA1A4_1[key]['E']==Eecc:  #key in dct_pgA1 and   
+				                   nele14_old=nele14_old+1       		                          
+
+      #print(oi_seuil_iter1,oi_seuil)
+      oi_seuil=max(oi_seuil_iter1,oi_seuil)
+      
+      
+#########################################################################
+#                                                                       
+#               FINAL UPDATE FOR ELEMENT IN DESIGN DOMAINS                   
+#                                                                       
+#########################################################################
+
+
+ 
+if iteration<=2:
+      oi_seuilt=dict()
+      oi_seuilt["oi_seuil"]=oi_seuil
+      with open("/home/majnooni/VanVuongLAI/code_lai_contact_plane_plane_understressplane/oi_seuil.json", "w") as inputi:
+              json.dump(oi_seuilt,inputi)  
+
+else:
+    
+      with open("/home/majnooni/VanVuongLAI/code_lai_contact_plane_plane_understressplane/oi_seuil.json") as inputi:
+	      oi_seuilt = json.load(inputi)   
+    				   
+      oi_seuil=oi_seuilt["oi_seuil"]
+
+
+for key in dct_pgA1A4:
+      if 1==1:
+
+	      if iteration>=1:            
+	        
+    		    if dct_pgA1A4[key]['OI']<oi_seuil  and dct_pgA1A4[key]['E']==Encc:  #key in dct_pgA1 and 
+    				     
+    				     dct_pgA1A4[key]['niter'] = dct_pgA1A4[key]['niter']+1
+    				     dct_pgA1A4[key]['Nu'] = Nuecc
+    				     dct_pgA1A4[key]['update'] = 'true'        	             
+    				     dct_pgA1A4[key]['E'] = Encc
+    				     dct_pgA1A4[key]['iteration'] += 1
+    				   
+    			     
+    		    if dct_pgA1A4[key]['OI']>=oi_seuil : #key in dct_pgA1 and 
+    				     
+    				     dct_pgA1A4[key]['niter'] = dct_pgA1A4[key]['niter']+1
+    				     dct_pgA1A4[key]['Nu'] = Nuecc
+    				     dct_pgA1A4[key]['update'] = 'true'        	             
+    				     dct_pgA1A4[key]['E'] = Eecc
+    				     dct_pgA1A4[key]['iteration'] += 1  
+    				    	  				   
+lst_new=[]# elements ossified
+lst_old=[] # cartilage elements       		     
+for key in dct_pgA1A4:
+      if dct_pgA1A4[key]['E'] == Eecc:
+	      lst_old=np.append(lst_old,key) 
+      else:
+	      lst_new=np.append(lst_new,key)
+    			     
+
+nnodold=[];
+for keyold in lst_old:
+      for keyi in dctElems2[keyold]:
+	      nnodold.append(keyi) 
+
+nodeallos=[]
+for key in dctElems2:
+      if key in dct_pgA0 or key in dct_pgA2 or key in dct_pgA3 or key in dct_pgA5:
+              print('elenodesign',dctElems2[key])
+              for keyi in dctElems2[key]:
+    		         nodeallos.append(keyi)	       
+    		    	      
+nodeallos=np.unique(nodeallos)	            
+
+
+nnodnew=[];
+for keyold in lst_new:
+      for keyi in dctElems2[keyold]:
+	      nnodnew.append(keyi) 
+nnodnew=np.unique(nnodnew)       
+nnodold=np.unique(nnodold)   
+
+
+
+
+if len(lst_old)>=1 and len(lst_new)>=1:
+      lst_new,lst_old=filtre_element(lst_new,nnodold,dctElems2,lst_old,nodeallos)  
+
+
+########percentage of elements ossified
+ossirate=dict()
+ossirate["ossirate"]=len(lst_old)/(len(lst_old)+len(lst_new))
+with open("/home/majnooni/VanVuongLAI/code_lai_contact_plane_plane_understressplane/ossirate.json", "w") as inputi:
+      json.dump(ossirate,inputi)  
+
+########COORDONEES DES POINTS DE CARTILAGES
+
+
+coodonnefinal=dict()
+lst_ecartilage4=[]
+lst_ecartilage1=[]
+for key in lst_new:
+      if key in dct_pgA4:
+	      lst_ecartilage4.append(key)
+      if key in dct_pgA1:
+	      lst_ecartilage1.append(key)
+coodonnefinal['lst_ecartilage4']=lst_ecartilage4
+coodonnefinal['lst_ecartilage1']=lst_ecartilage1
+coodonnefinal['dctElems2']=dctElems2
+coodonnefinal['dctNodes']=dctNodes
+
+
+with open(repertoire+'/coodonnefinal.json', "w") as outfile:
+      json.dump(coodonnefinal, outfile)   
+##print('lst_ecartilage4',coodonnefinal['lst_ecartilage4'])
+
+
+
+for key in dct_pgA1A4:
+      if key in lst_new:
+	      dct_pgA1A4[key]['E'] = Encc
+      else:
+	      dct_pgA1A4[key]['E'] = Eecc
+    
+      
+
+
+#########################################################################
+#                                                                       
+#               CONTACT PRESSURE RESULTS                    
+#                                                                       
+#########################################################################
+
+with open(elems_props_new, "w") as outfile:
+      json.dump(dct_pgA1A4, outfile)      
+      
+cp_values['oi_seuil']=oi_seuil
+cp_values['necartilage']=len(lst_new)
+with open(path_cp_values, "w") as outfile:
+      json.dump(cp_values, outfile)   
+      
+#########################################################################
+#                                                                       
+#               RMED FILES (RESULTS)                    
+#                                                                       
+#########################################################################
+
+
+
+#########################################################################
+#                                                                       
+#               VTK FILES (RESULTS - PARAVIEW)                   
+#                                                                       
+#########################################################################
+
+# constructing CELL_DATA 
+lst_mat_props_TOTAL = list()
+oi_TOTAL = list()
+sh_TOTAL = list()
+so_TOTAL = list()
+
+for key in GROUP_MA_dict['TOTAL']:
+      ####print(key)
+      oi_TOTAL.append(shh_soo_elems[key]['OI'])
+      so_TOTAL.append(shh_soo_elems[key]['SOO'])
+      sh_TOTAL.append(shh_soo_elems[key]['SHH'])
+      
+           
+      if key in dct_pgA1A4:
+            E = dct_pgA1A4[key]['E']         
+      
+      elif key in dct_pgA5:
+            E = dct_pgA5[key]['E']
+      elif key in dct_pgA0:
+            E = dct_pgA0[key]['E']
+      elif key in dct_pgA2:
+            E = dct_pgA2[key]['E']
+     
+      elif key in dct_pgA3:
+            E = dct_pgA3[key]['E']
+      else:
+            E=Encc     
+      if key in dct_pgA1A4 and iteration==0:
+            E = Encc   
+
+
+      lst_mat_props_TOTAL.append(E)
+
+      ####print(key)
+
+
+
+# GENERATING VTK FILE
+with open(path_vtk,'w') as vtk_file:
+      # Heading of the vtk file
+      vtk_file.write('# vtk DataFile Version 4.2\n')
+      vtk_file.write(f'Results of Analysis {iteration}\n')
+      vtk_file.write('ASCII\n')
+      vtk_file.write('\n')
+
+      # Dataset Format
+      vtk_file.write('DATASET UNSTRUCTURED_GRID\n')
+      vtk_file.write('POINTS ' + str(ALLnnod) + ' float\n')
+
+      # Write coordinates of the nodes line by line
+      for num_node in range(ALLnnod):
+            x = str(round(coord_nodes[num_node,0],2))
+            y = str(round(coord_nodes[num_node,1],2))
+            z = str(round(coord_nodes[num_node,2],2))
+            vtk_file.write(f'{x} {y} {z}\n')
+      vtk_file.write('\n')
+
+      # Write cells line by line
+      size = 0
+      for num_elem in range(ALLnelem):
+            nodes = connec[num_elem]
+            size += len(nodes) + 1
+            line = np.insert(nodes, 0, len(nodes), axis=0)
+      
+      vtk_file.write('CELLS ' + str(ALLnelem) + ' ' + str(size) +'\n')
+      for num_elem in range(ALLnelem):
+            nodes = connec[num_elem]
+            cell_line = f'{len(nodes)}'
+            for node in nodes:
+                  cell_line += ' ' + str(node)
+            vtk_file.write(cell_line + '\n')
+      vtk_file.write('\n')
+
+      # Write type of cells line by line
+      vtk_file.write('CELL_TYPES '+ str(ALLnelem)+'\n')
+      for num_elem in range(ALLnelem):
+            len_nodes = len(connec[num_elem])
+            if len_nodes == 2:
+                  vtk_file.write(str(3)+'\n')
+            elif len_nodes == 3:
+                  vtk_file.write(str(5)+'\n')
+            elif len_nodes == 4:
+                  vtk_file.write(str(9)+'\n')
+            else:
+                  vtk_file.write('Happy birthday to you!'+'\n')
+      vtk_file.write('\n')
+
+      # Write cell data line by line
+      vtk_file.write('CELL_DATA ' + str(ALLnelem) + '\n')
+      vtk_file.write('SCALARS ' + 'E'+ ' float\n')
+      vtk_file.write('LOOKUP_TABLE default \n')
+      vtk_file.write('\n')
+      for val in lst_mat_props_TOTAL:
+            vtk_file.write(str(val) + '\n')
+
+      vtk_file.write('\n')
+      vtk_file.write('SCALARS ' + 'OI' + ' float\n')
+      vtk_file.write('LOOKUP_TABLE default \n')
+      vtk_file.write('\n')
+      for val in oi_TOTAL:
+            vtk_file.write(str(val) + '\n')
+
+      vtk_file.write('\n')
+      vtk_file.write('SCALARS ' + 'SOO' + ' float\n')
+      vtk_file.write('LOOKUP_TABLE default \n')
+      vtk_file.write('\n')
+      for val in so_TOTAL:
+            vtk_file.write(str(val) + '\n')
+
+      vtk_file.write('\n')
+      vtk_file.write('SCALARS ' + 'SHH' + ' float\n')
+      vtk_file.write('LOOKUP_TABLE default \n')
+      vtk_file.write('\n')
+      for val in sh_TOTAL:
+            vtk_file.write(str(val) + '\n')
+
+      # Write cell stresses line by line
+      for key in dct_stress_elems:
+            vtk_file.write('SCALARS ' + key + ' float\n')
+            vtk_file.write('LOOKUP_TABLE default \n')
+            for val in dct_stress_elems[key]:
+                  vtk_file.write(str(val) + '\n')
+
+      # vtk_file.write('\n')
+      # vtk_file.write('POINT_DATA ' + str(ALLnnod) + '\n')
+      # for key in dct_stress_nodes:
+      #       vtk_file.write('SCALARS ' + str(key) +  ' float 1\n')
+      #       vtk_file.write(f'LOOKUP_TABLE default_{key} \n')
+      #       for val in dct_stress_nodes[key]:
+      #             vtk_file.write(str(val) + '\n')
+      #       vtk_file.write('\n')
+
+
+####print(elems_props_new)
+
+FIN()
+
+
