@@ -218,23 +218,16 @@ mesh = DEFI_GROUP(reuse = mesh,
                   MAILLAGE = mesh,
                   CREA_GROUP_NO=(
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgFixed'), NOM=('pgFixed')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA1'), NOM=('pgColA1')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA1'), NOM=('pgSymA1')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA1'), NOM=('pgA1')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA2'),NOM=('pgColA2')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgCtA2'),NOM=('pgCtA2')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA2'),NOM=('pgSymA2')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA2'),NOM=('pgA2')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA0'),NOM=('pgA0')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgCtA3'), NOM=('pgCtA3')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA3'), NOM=('pgColA3')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA3'),NOM=('pgSymA3')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA3'),NOM=('pgA3')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA41'), NOM=('pgColA41')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA42'), NOM=('pgColA42')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA4'),NOM=('pgSymA4')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA4'),NOM=('pgA4')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA5'), NOM=('pgColA5')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgLoad'), NOM=('pgLoad')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA5'),NOM=('pgSymA5')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA5'),NOM=('pgA5')),
@@ -321,9 +314,6 @@ for line in mesh_data.split("\n"):
                   dctElems2[element_label] = nodes_of_element
                  
                   ####print('element:',element_label,dctElems2[element_label])
-
-
-
 
 ###### Constrcuting all GROUP_MA
 GROUP_MA_dict = dict()
@@ -574,9 +564,6 @@ if iteration == 0: # all design domains ossified
                   NOM_CHAM='ETOT_ELEM',
                   INST=1.0)
                   
-
-
-
       shh = champ.EXTR_COMP('X1',['TOTAL']).valeurs.tolist()
       soo = champ.EXTR_COMP('X2',['TOTAL']).valeurs.tolist()
       si_xx = champ.EXTR_COMP('X3',['TOTAL']).valeurs.tolist()
