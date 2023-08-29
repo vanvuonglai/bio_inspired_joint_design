@@ -29,8 +29,7 @@ def OIM(L,ho,h1,lcontour,lc,Encc,Nuncc,Eecc,Nuecc,Fy,kappa,koii,case_name,aster_
     with open(str(pathlib.Path(__file__).parent.resolve()) +'/'+case_name+'/parameters.json', "w") as outfile:
         json.dump(jsonData,outfile)  
     
-    
-    
+
 #%% ALL PATHS where RESULTS are stored
     
     foldersave='results_all' # folder to store all files
@@ -38,9 +37,6 @@ def OIM(L,ho,h1,lcontour,lc,Encc,Nuncc,Eecc,Nuecc,Fy,kappa,koii,case_name,aster_
         path = os.path.join(str(pathlib.Path(__file__).parent.resolve())+'/'+case_name , foldersave)
         os.mkdir(path)    
         
-#    with open('parameters.json') as parameters:
-#        jsonData = json.load(parameters)
-#    jsonData={}    
     
     nameficheroi='plane_plane1_'+str(kappa)+'koi'+str(koii) 
     
@@ -264,7 +260,6 @@ def OIM(L,ho,h1,lcontour,lc,Encc,Nuncc,Eecc,Nuecc,Fy,kappa,koii,case_name,aster_
         plt.savefig(case_name+'/'+foldersave +'/qualityIndicatorQ_Fy'+str(int(-Fy))+'_koi'+str(koii)+'_Ecartilage'+str(int(Encc/1000))+'GPa.eps')
        
         iteration_all=iteration_all+1
-        
         
         # condition to stop simulation
         res1= file['necartilage']# number of cartilage elements
