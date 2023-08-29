@@ -7,8 +7,6 @@ import pathlib
 aster_root_folder=os.getenv('HOME')+'/salome_meca/appli_V2019.0.3_universal/salome shell -- as_run' # folder of code_aster
 from OIM_algorithm import OIM # import  ossification-inspired method (OIM) algorithm
 
-
-
 # work folder
 case_name='contact_plate_plate_stressplane' 
 
@@ -30,7 +28,6 @@ Eecc=200000 # Young modulus of bone
 Nuecc = 0.3;# Poisson's ratio of bone
 Encc=80000 # Young modulus of cartilage
 Nuncc = 0.3;# Poisson's ratio of cartialge
-
 
 #%% Applied force:
 Fy=-2500
