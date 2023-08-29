@@ -344,8 +344,9 @@ for key in NoGO.keys():
 #######################
 
 model = AFFE_MODELE(AFFE=_F(
-                        #MODELISATION=('C_PLAN', ), # STRESS PLAN CONDITION
-                        MODELISATION=('AXIS','AXIS_SI' ), # AXYSYMMETRIC AROUND Y-AXIS
+                        MODELISATION=('C_PLAN', ), # STRESS PLAN CONDITION
+                        #MODELISATION=('D_PLAN', ), # STRAIN PLAN CONDITION
+                        #MODELISATION=('AXIS','AXIS_SI' ), # AXYSYMMETRIC AROUND Y-AXIS
                         PHENOMENE='MECANIQUE',
                         TOUT='OUI'),
                         MAILLAGE=mesh)
