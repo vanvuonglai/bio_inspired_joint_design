@@ -44,8 +44,6 @@ def principal_Stress_calcsh(sxx,syy,sxy): # compute hydrostatic stress
       sh=(s11+s22)/2
       return sh #s11,s22    
 
-
-
 def filtre_element(lst_new,nnodold,dctElems2,lst_old,nodeallos): #eliminate isolated elements : if elements are surounded by other elements of different material properties
    lst_new1=[]
    lst_new1=[]
@@ -69,9 +67,6 @@ def filtre_element(lst_new,nnodold,dctElems2,lst_old,nodeallos): #eliminate isol
            
    return lst_new1,lst_old
 
-
-
-
 def find_percent_oi(lst_old1,lst_old4,nele1,nele4): # minimum percentage of elements ossified in design domains
     
    
@@ -83,8 +78,6 @@ def find_percent_oi(lst_old1,lst_old4,nele1,nele4): # minimum percentage of elem
 from Utilitai.partition import *
 
 folder_file_main="/home/majnooni/VanVuongLAI/code_lai_contact_plane_plane_understressplane/"
-
-
 
 # Opening JSON file of parameters namereper
 with open(folder_file_main+"namereper.json") as input_params:
@@ -220,24 +213,17 @@ mesh = DEFI_GROUP(reuse=mesh,
 mesh = DEFI_GROUP(reuse = mesh,
                   MAILLAGE = mesh,
                   CREA_GROUP_NO=(
-                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgFixed'), NOM=('pgFixed')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA1'), NOM=('pgColA1')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA1'), NOM=('pgSymA1')),
+                                    _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgFixed'), NOM=('pgFixed')),             
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA1'), NOM=('pgA1')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA2'),NOM=('pgColA2')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgCtA2'),NOM=('pgCtA2')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA2'),NOM=('pgSymA2')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA2'),NOM=('pgA2')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA0'),NOM=('pgA0')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgCtA3'), NOM=('pgCtA3')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA3'), NOM=('pgColA3')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA3'),NOM=('pgSymA3')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA3'),NOM=('pgA3')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA41'), NOM=('pgColA41')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA42'), NOM=('pgColA42')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA4'),NOM=('pgSymA4')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA4'),NOM=('pgA4')),
-                                    # _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgColA5'), NOM=('pgColA5')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgLoad'), NOM=('pgLoad')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgSymA5'),NOM=('pgSymA5')),
                                     _F(CRIT_NOEUD='TOUS', GROUP_MA=('pgA5'),NOM=('pgA5')),
@@ -325,9 +311,6 @@ for line in mesh_data.split("\n"):
                  
                   ####print('element:',element_label,dctElems2[element_label])
 
-
-
-
 ###### Constrcuting all GROUP_MA
 GROUP_MA_dict = dict()
 for num in range(len(mesh_data_list)):
@@ -352,7 +335,6 @@ for key in NoGO.keys():
       temp_list_nodes = [f'N{num}' for num in temp_array_nodes]
       GROUP_NO_dict[temp_key] = temp_list_nodes
   
-
 
 #######################
 
